@@ -1,18 +1,8 @@
-from ruamel import yaml
-import argparse
+from dcconfig import BaseService, Compose
 
-class baseService():
+class BaseDb(BaseService):
     def __init__(self, name):
-        self.name = name
-    
-    def getDict(self):
-        dict = self.__dict__
-        del dict['name']
-        return dict
-
-class baseDb(baseService):
-    def __init__(self, name):
-        super().__init__(name)
+        super(BaseDb, self).__init__(name)
 
         self.image = 'postgres:13'
         self.restart = 'always'
@@ -25,9 +15,9 @@ class baseDb(baseService):
         self.ports = ['5678:5432']
         self.volumes = ['./data/postgres-data:/var/lib/postgresql/data']
 
-class baseApiService(baseService):
+class BaseApiService(BaseService):
     def __init__(self, name):
-        super().__init__(name)
+        super(BaseApiService, self).__init__(name)
 
         self.build = './apiservice'
         self.volumes = ['./apiservice:/usr/src/app']
@@ -48,9 +38,9 @@ class baseApiService(baseService):
             'TEST_WX': '\'FALSE\''
         }
 
-class nginx(baseService):
+class Nginx(BaseService):
     def __init__(self):
-        super().__init__('nginx')
+        super(Nginx, self).__init__()
 
         self.depends_on = ['apiservice', 'api_empty', 'admin']
         self.build = './nginx'
@@ -60,52 +50,22 @@ class nginx(baseService):
             'TZ' : 'Asia/Shanghai'
         }
 
-class redis(baseService):
+class Redis(BaseService):
     def __init__(self):
-        super().__init__('redis')
+        super(Redis, self).__init__()
 
         self.image = 'redis:6'
         self.command = 'redis-server --requirepass passwd'
         self.ports = ['6379:6379']
-        
 
-class Config():
-    def __init__(self, version=3):
-        self.version = 3
-        self.servers = {}
-    
-    def addDb(self, name):
-        self.servers[name] = baseDb(name)
-    
-    def addApiService(self, name):
-        self.servers[name] = baseApiService(name)
+db = BaseDb('db')
+empty_classroom_db = BaseDb('empty_classroom_db')
+nginx = Nginx()
+redis = Redis()
+services = [db, empty_classroom_db, nginx, redis]
 
-    def addNginx(self):
-        self.servers['nginx'] = nginx()
+my_compose = Compose()
+my_compose.add_services(services)
 
-    def addRedis(self):
-        self.servers['redis'] = redis()
+my_compose.build_file('./test.yml')
 
-    def buildConfigDict(self):
-        data = {}
-        data['version'] = f'{self.version}'
-        data['services'] = {}
-        for serviceName, serviceClass in self.servers.items():
-            data['services'][serviceName] = serviceClass.getDict()
-        return data
-
-    def buildConfigFile(self, filename):
-        data = self.buildConfigDict()
-        with open(filename, 'w') as distFile:
-            yaml.dump(data, distFile, Dumper=yaml.RoundTripDumper)
-        print(data)
-
-# usage:
-# c = Config()
-# c.addDb('db')
-# c.addDb('empty_classroom_db')
-# c.addApiService('apiservice')
-# c.addApiService('api_empty')
-# c.addNginx()
-# c.addRedis()
-# c.buildConfigFile('./docker-compose.yml')
